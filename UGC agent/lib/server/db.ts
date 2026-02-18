@@ -1,13 +1,19 @@
 import { randomUUID } from "crypto";
 
 type PrismaModule = {
-  PrismaClient: new () => {
-    scriptRun: { create: (args: unknown) => Promise<{ id: string }> };
-    videoJob: {
-      create: (args: unknown) => Promise<{ id: string }>;
-      findUnique: (args: unknown) => Promise<unknown>;
-      update: (args: unknown) => Promise<unknown>;
-    };
+  PrismaClient: new () => PrismaClientLike;
+};
+
+type PrismaClientLike = {
+  scriptRun: { create: (args: unknown) => Promise<{ id: string }> };
+  videoJob: {
+    create: (args: unknown) => Promise<{ id: string }>;
+    findUnique: (args: unknown) => Promise<unknown>;
+    update: (args: unknown) => Promise<unknown>;
+  };
+  template: {
+    updateMany: (args: unknown) => Promise<{ count: number }>;
+    create: (args: unknown) => Promise<unknown>;
   };
 };
 
@@ -28,14 +34,7 @@ async function loadPrismaModule(): Promise<PrismaModule | null> {
 
 export async function getPrismaClient() {
   if (globalForPrisma.__ugcPrisma) {
-    return globalForPrisma.__ugcPrisma as {
-      scriptRun: { create: (args: unknown) => Promise<{ id: string }> };
-      videoJob: {
-        create: (args: unknown) => Promise<{ id: string }>;
-        findUnique: (args: unknown) => Promise<unknown>;
-        update: (args: unknown) => Promise<unknown>;
-      };
-    };
+    return globalForPrisma.__ugcPrisma as PrismaClientLike;
   }
 
   if (!process.env.DATABASE_URL) {
