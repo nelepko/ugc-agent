@@ -22,16 +22,25 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as GenerateVideoBody;
 
     if (!body.templateId) {
-      return NextResponse.json({ error: { code: "INVALID_INPUT", message: "templateId is required", details: {} } }, { status: 400 });
+      return NextResponse.json(
+        { error: { code: "INVALID_INPUT", message: "templateId is required", details: {} } },
+        { status: 400 }
+      );
     }
 
     if (!body.projectId) {
-      return NextResponse.json({ error: { code: "INVALID_INPUT", message: "projectId is required", details: {} } }, { status: 400 });
+      return NextResponse.json(
+        { error: { code: "INVALID_INPUT", message: "projectId is required", details: {} } },
+        { status: 400 }
+      );
     }
 
     const template = getTemplate(body.templateId);
     if (!template) {
-      return NextResponse.json({ error: { code: "INVALID_INPUT", message: "Unknown template", details: {} } }, { status: 400 });
+      return NextResponse.json(
+        { error: { code: "INVALID_INPUT", message: "Unknown template", details: {} } },
+        { status: 400 }
+      );
     }
 
     const provider = body.provider ?? "stub-provider";
@@ -50,13 +59,13 @@ export async function POST(request: NextRequest) {
           status: "QUEUED",
           aspectRatio: body.aspectRatio ?? "9:16",
         },
-        select: { id: true, status: true },
+        select: { id: true },
       });
 
       return NextResponse.json(
         {
           videoJobId: created.id,
-          status: created.status,
+          status: "QUEUED",
           persisted: true,
           storageMode: "database",
         },
