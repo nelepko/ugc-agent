@@ -1,63 +1,99 @@
-import { NextResponse } from "next/server";
-import { getPrismaClient } from "@/lib/server/db";
-import { TEMPLATES } from "@/lib/templates";
+import { NextRequest, NextResponse } from "next/server";
+import { createLocalVideoJob } from "@/lib/server/video-jobs-store";
+import { getPrismaClient, newId } from "@/lib/server/db";
+import { getTemplate, type TemplateId } from "@/lib/templates";
 
-function parseDuration(value: string): { min: number; max: number } {
-  const matches = value.match(/(\d+)/g);
-  if (!matches || matches.length === 0) return { min: 20, max: 30 };
-  const nums = matches.map(Number).filter((n) => Number.isFinite(n));
-  if (nums.length === 1) return { min: nums[0], max: nums[0] };
-  return { min: Math.min(nums[0], nums[1]), max: Math.max(nums[0], nums[1]) };
-}
+export const maxDuration = 120;
 
-export async function POST() {
-  const prisma = await getPrismaClient();
-  if (!prisma) {
-    return NextResponse.json(
-      {
-        seeded: 0,
-        storageMode: "in-memory",
-        message: "Prisma client unavailable. Install prisma deps and set DATABASE_URL.",
-      },
-      { status: 200 }
-    );
-  }
+type GenerateVideoBody = {
+  workspaceId?: string;
+  projectId?: string;
+  userId?: string;
+  templateId: TemplateId;
+  scriptRunId?: string;
+  variantId?: string;
+  provider?: string;
+  voice?: string;
+  aspectRatio?: string;
+};
 
-  let seeded = 0;
+export async function POST(request: NextRequest) {
+  try {
+    const body = (await request.json()) as GenerateVideoBody;
 
-  for (const template of TEMPLATES) {
-    const { min, max } = parseDuration(template.duration);
-
-    const updated = await prisma.template.updateMany({
-      where: { id: template.id },
-      data: {
-        name: template.name,
-        description: template.description,
-        durationSecMin: min,
-        durationSecMax: max,
-        fieldsJson: template.fields,
-        scriptHintsJson: template.scriptHints,
-        isActive: true,
-      },
-    });
-
-    if (updated.count === 0) {
-      await prisma.template.create({
-        data: {
-          id: template.id,
-          name: template.name,
-          description: template.description,
-          durationSecMin: min,
-          durationSecMax: max,
-          fieldsJson: template.fields,
-          scriptHintsJson: template.scriptHints,
-          isActive: true,
-        },
-      });
+    if (!body.templateId) {
+      return NextResponse.json(
+        { error: { code: "INVALID_INPUT", message: "templateId is required", details: {} } },
+        { status: 400 }
+      );
     }
 
-    seeded += 1;
-  }
+    if (!body.projectId) {
+      return NextResponse.json(
+        { error: { code: "INVALID_INPUT", message: "projectId is required", details: {} } },
+        { status: 400 }
+      );
+    }
 
-  return NextResponse.json({ seeded, storageMode: "database" });
+    const template = getTemplate(body.templateId);
+    if (!template) {
+      return NextResponse.json(
+        { error: { code: "INVALID_INPUT", message: "Unknown template", details: {} } },
+        { status: 400 }
+      );
+    }
+
+    const provider = body.provider ?? "stub-provider";
+    const prisma = await getPrismaClient();
+
+    if (prisma && body.userId) {
+      const created = await prisma.videoJob.create({
+        data: {
+          id: newId("vid"),
+          workspaceId: body.workspaceId ?? "workspace_local",
+          projectId: body.projectId,
+          userId: body.userId,
+          templateId: template.id,
+          scriptRunId: body.scriptRunId,
+          provider,
+          status: "QUEUED",
+          aspectRatio: body.aspectRatio ?? "9:16",
+        },
+        select: { id: true },
+      });
+
+      return NextResponse.json(
+        {
+          videoJobId: created.id,
+          status: "QUEUED",
+          persisted: true,
+          storageMode: "database",
+        },
+        { status: 202 }
+      );
+    }
+
+    const localJob = createLocalVideoJob({
+      provider,
+      projectId: body.projectId,
+      templateId: template.id,
+      scriptRunId: body.scriptRunId,
+    });
+
+    return NextResponse.json(
+      {
+        videoJobId: localJob.id,
+        status: localJob.status,
+        persisted: false,
+        storageMode: "in-memory",
+      },
+      { status: 202 }
+    );
+  } catch (err) {
+    console.error("videos/generate error:", err);
+    return NextResponse.json(
+      { error: { code: "INTERNAL", message: err instanceof Error ? err.message : "Internal server error", details: {} } },
+      { status: 500 }
+    );
+  }
 }
