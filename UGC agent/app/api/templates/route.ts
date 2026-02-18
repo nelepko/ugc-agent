@@ -4,13 +4,9 @@ import { TEMPLATES } from "@/lib/templates";
 
 function parseDuration(value: string): { min: number; max: number } {
   const matches = value.match(/(\d+)/g);
-  if (!matches || matches.length === 0) {
-    return { min: 20, max: 30 };
-  }
+  if (!matches || matches.length === 0) return { min: 20, max: 30 };
   const nums = matches.map(Number).filter((n) => Number.isFinite(n));
-  if (nums.length === 1) {
-    return { min: nums[0], max: nums[0] };
-  }
+  if (nums.length === 1) return { min: nums[0], max: nums[0] };
   return { min: Math.min(nums[0], nums[1]), max: Math.max(nums[0], nums[1]) };
 }
 
@@ -63,8 +59,5 @@ export async function POST() {
     seeded += 1;
   }
 
-  return NextResponse.json({
-    seeded,
-    storageMode: "database",
-  });
+  return NextResponse.json({ seeded, storageMode: "database" });
 }
